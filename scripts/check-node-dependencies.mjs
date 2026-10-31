@@ -5,9 +5,18 @@ import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const readJson = (path) => JSON.parse(readFileSync(path, 'utf8'));
 const supported = (values, current) => !values || (!values.includes(`!${current}`) && (values.every((v) => v.startsWith('!')) || values.includes(current)));
+const detectLibc = (platform) => {
+  if (platform !== 'linux') return undefined;
+  return process.report?.getReport?.().header?.glibcVersionRuntime ? 'glibc' : 'musl';
+};
 
 /** Inspect actual installed versions, not a stamp that can outlive node_modules. */
-export function inspectNodeDependencies(repo = root, platform = process.platform, arch = process.arch) {
+export function inspectNodeDependencies(
+  repo = root,
+  platform = process.platform,
+  arch = process.arch,
+  libc = platform === process.platform ? detectLibc(platform) : undefined,
+) {
   const packages = [];
   const problems = [];
   const manifests = ['package.json', 'frontend/dashboard/package.json'];
@@ -26,7 +35,7 @@ export function inspectNodeDependencies(repo = root, platform = process.platform
   }
   const lockValid = problems.length === 0;
   for (const [location, expected] of Object.entries(lock.packages ?? {})) {
-    if (!location.includes('node_modules/') || !supported(expected.os, platform) || !supported(expected.cpu, arch)) continue;
+    if (!location.includes('node_modules/') || !supported(expected.os, platform) || !supported(expected.cpu, arch) || !supported(expected.libc, libc)) continue;
     const file = resolve(repo, location, 'package.json');
     let installed;
     try { installed = readJson(file); } catch { /* Missing or damaged packages need installation. */ }
