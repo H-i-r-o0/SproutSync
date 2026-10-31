@@ -636,6 +636,42 @@ test("Amaro notification details and Help FAQ work on a narrow screen", async ({
   await expect(help).toBeHidden();
 });
 
+test("device fault alerts appear in notifications and alert history", async ({ page }) => {
+  await mock(page);
+  const faultAlert = {
+    id: 21,
+    owner_id: 1,
+    device_id: 1,
+    title: "Device fault: Test chamber",
+    message: "Test chamber (TEST-001) reported SD CARD ERR. Check the latest sensor readings before relying on them.",
+    recommended_action: "Inspect the reported device fault and confirm fresh readings return.",
+    severity: "warning",
+    status: "open",
+    category: "device",
+    created_at: new Date().toISOString(),
+  };
+  await page.route(`https://${authHost}/rest/v1/alerts*`, (route) =>
+    route.fulfill({ json: [faultAlert] }),
+  );
+  await page.goto("/operator");
+
+  await page.getByRole("button", { name: "Notifications, 1 active alerts", exact: true }).click();
+  const notifications = page.getByRole("dialog");
+  await expect(notifications.getByText(faultAlert.title, { exact: true })).toBeVisible();
+  await expect(notifications.getByText(faultAlert.message, { exact: true })).toBeVisible();
+  await notifications.getByRole("button", { name: "Close dialog", exact: true }).click();
+
+  const navigation = page.getByRole("navigation", { name: "Main navigation" });
+  await navigation.getByRole("button", { name: /^Alerts/ }).click();
+  const alertRow = page.getByRole("button").filter({ hasText: faultAlert.title });
+  await expect(alertRow).toBeVisible();
+  await alertRow.click();
+  const details = page.getByRole("dialog");
+  await expect(details.getByText("device", { exact: true })).toBeVisible();
+  await expect(details.getByText(faultAlert.message, { exact: true })).toBeVisible();
+  await expect(details.getByText(faultAlert.recommended_action, { exact: true })).toBeVisible();
+});
+
 test("Amaro account and audit layouts keep search, event order, and mobile reflow", async ({ page }) => {
   await mock(page, "superadmin");
   await page.route("**/api/v1/superadmin/accounts", (route) => route.fulfill({ json: [] }));
@@ -677,4 +713,29 @@ test("Amaro account and audit layouts keep search, event order, and mobile reflo
   expect(auditCell!.width / auditCard!.width).toBeGreaterThan(0.8);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: "test-results/amaro-audit-mobile.png", fullPage: true });
+});
+
+test("history pagination stays within the grid when there are many pages", async ({ page }) => {
+  await mock(page, "superadmin");
+  await page.route("**/api/v1/superadmin/accounts", (route) => route.fulfill({ json: [] }));
+  await page.route(`https://${authHost}/rest/v1/activity_logs*`, (route) =>
+    route.fulfill({ json: Array.from({ length: 1224 }, (_, index) => ({
+      id: 1224 - index,
+      action: "update_account",
+      resource: `users:${1224 - index}`,
+      created_at: new Date(Date.now() - index * 1000).toISOString(),
+    })) }),
+  );
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/superadmin");
+  await page.getByRole("navigation", { name: "Main navigation" })
+    .getByRole("button", { name: "Audit Log", exact: true }).click();
+
+  const pagination = page.getByRole("navigation", { name: "Table pages" });
+  await expect(pagination.getByRole("button", { name: /^Page / })).toHaveCount(6);
+  expect(await pagination.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+  await pagination.getByRole("button", { name: "Next page", exact: true }).click();
+  await expect(pagination.getByRole("button", { name: "Page 2", exact: true }))
+    .toHaveAttribute("aria-current", "page");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });

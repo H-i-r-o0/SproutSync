@@ -1565,7 +1565,6 @@ export default function Workspace({
                       Supply voltage: {currentReading.voltage == null ? "Not reported" : `${currentReading.voltage} V`} · SD card: {currentReading.sd_ok == null ? "Not reported" : currentReading.sd_ok ? "OK" : "Error"}
                     </p>}
                     {readingStale && <p role="status" className="feedback-error mb-4">Showing the last known reading. Waiting for fresh sensor data.</p>}
-                    {currentReading?.sensor_status && !["NONE", "OK", "NORMAL"].includes(currentReading.sensor_status) && <p role="status" className="feedback-error mb-4">Device reported: {currentReading.sensor_status}. Faulty sensor values are unavailable.</p>}
                     {/* 6 Detailed Sensor Telemetry Cards matching image_e0a5e9.png */}
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
                       {/* 1. Air Temperature */}
@@ -4312,6 +4311,14 @@ function DataTable({
     setPage((current) => Math.min(current, pageCount));
   }, [pageCount]);
   if (!rows.length) return <Empty text={empty} />;
+  const pageNumbers: (number | "...")[] =
+    pageCount <= 7
+      ? Array.from({ length: pageCount }, (_, index) => index + 1)
+      : page <= 4
+        ? [1, 2, 3, 4, 5, "...", pageCount]
+        : page >= pageCount - 3
+          ? [1, "...", pageCount - 4, pageCount - 3, pageCount - 2, pageCount - 1, pageCount]
+          : [1, "...", page - 1, page, page + 1, "...", pageCount];
   const visibleRows = rows.slice((page - 1) * pageSize, page * pageSize);
   return (
     <>
@@ -4345,14 +4352,23 @@ function DataTable({
       </div>
       {pageCount > 1 && (
         <nav className="table-pagination" aria-label="Table pages">
-          <button disabled={page === 1} onClick={() => setPage(page - 1)}>
+          <button
+            aria-label="Previous page"
+            disabled={page === 1}
+            onClick={() => setPage(page - 1)}
+          >
             Previous
           </button>
-          {Array.from({ length: pageCount }, (_, index) => index + 1).map(
-            (number) => (
+          {pageNumbers.map((number, index) =>
+            number === "..." ? (
+              <span className="table-pagination-ellipsis" aria-hidden="true" key={`ellipsis-${index}`}>
+                …
+              </span>
+            ) : (
               <button
                 key={number}
                 aria-current={page === number ? "page" : undefined}
+                aria-label={`Page ${number}`}
                 onClick={() => setPage(number)}
               >
                 {number}
@@ -4360,6 +4376,7 @@ function DataTable({
             ),
           )}
           <button
+            aria-label="Next page"
             disabled={page === pageCount}
             onClick={() => setPage(page + 1)}
           >

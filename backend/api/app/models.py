@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint, func
+from sqlalchemy import Boolean, CheckConstraint, DateTime, Float, ForeignKey, ForeignKeyConstraint, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -94,6 +94,50 @@ class Device(Base):
     owner: Mapped[User] = relationship(foreign_keys=[owner_id])
 
 
+class Alert(Base):
+    """A system or device exception shown in workspace alerts and notifications."""
+
+    __tablename__ = "alerts"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["device_id", "owner_id"],
+            ["devices.id", "devices.owner_id"],
+        ),
+        CheckConstraint(
+            "severity in ('info', 'warning', 'critical')",
+            name="alerts_severity_check",
+        ),
+        CheckConstraint(
+            "status in ('open', 'acknowledged', 'resolved')",
+            name="alerts_status_check",
+        ),
+        CheckConstraint(
+            "category in ('system', 'harvest', 'device')",
+            name="alerts_category_check",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    device_id: Mapped[int | None] = mapped_column(nullable=True)
+    title: Mapped[str] = mapped_column(String(200))
+    message: Mapped[str] = mapped_column(Text)
+    recommended_action: Mapped[str] = mapped_column(Text, default="", server_default="")
+    severity: Mapped[str] = mapped_column(String(16))
+    status: Mapped[str] = mapped_column(
+        String(16), default="open", server_default="open"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    category: Mapped[str] = mapped_column(
+        String(16), default="system", server_default="system"
+    )
+    is_demo: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
+
+
 class TelemetryReading(Base):
     """One validated MQTT packet; absent or faulty sensors remain null."""
 
@@ -157,4 +201,3 @@ class ActivityLog(Base):
     resource: Mapped[str] = mapped_column(String(255))
     is_demo: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-

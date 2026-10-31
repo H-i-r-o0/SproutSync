@@ -1384,15 +1384,28 @@ button:disabled {
   display: flex;
   justify-content: flex-end;
   align-items: center;
+  flex-wrap: wrap;
+  width: 100%;
+  min-width: 0;
   gap: 6px;
+  margin-top: 12px;
 }
 .table-pagination button {
+  flex: 0 0 auto;
   min-width: 38px;
   min-height: 38px;
   border: 1px solid #dce6df;
   border-radius: 9px;
   padding: 7px 10px;
   color: #4c6655;
+  font-size: 12px;
+}
+.table-pagination-ellipsis {
+  display: inline-grid;
+  min-width: 20px;
+  min-height: 38px;
+  place-items: center;
+  color: #617768;
   font-size: 12px;
 }
 .table-pagination button[aria-current="page"] {

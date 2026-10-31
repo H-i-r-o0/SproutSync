@@ -42,6 +42,7 @@ export type Device = {
 export type Alert = {
   id: number;
   owner_id: number;
+  device_id?: number | null;
   title: string;
   message: string;
   recommended_action: string;

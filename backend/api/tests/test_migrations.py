@@ -34,6 +34,11 @@ def test_fresh_upgrade_sql_supports_all_existing_revision_ids(monkeypatch):
         str(Path(__file__).resolve().parents[1] / "alembic.ini"), output_buffer=output
     )
     script = ScriptDirectory.from_config(config)
+    assert script.get_current_head() == "0017_device_fault_alerts"
+    assert (
+        script.get_revision("0017_device_fault_alerts").down_revision
+        == "0016_remove_demo_workspace_data"
+    )
     assert (
         max(len(revision.revision) for revision in script.walk_revisions())
         <= REVISION_LENGTH
@@ -46,3 +51,5 @@ def test_fresh_upgrade_sql_supports_all_existing_revision_ids(monkeypatch):
     assert head in sql
     assert "CREATE TABLE users" in sql
     assert "public.request_operator_access" in sql
+    assert "category in ('system', 'harvest', 'device')" in sql
+    assert "alter publication supabase_realtime add table public.alerts" in sql

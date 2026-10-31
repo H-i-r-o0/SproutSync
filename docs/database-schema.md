@@ -58,6 +58,16 @@ Missing or faulty measurements remain null. Existing RLS read policies apply;
 authenticated browser roles cannot write ingestion or connection state.
 Both tables are published to `supabase_realtime` when that publication exists.
 
+## Device fault alerts (0017)
+
+Fresh valid telemetry with a fault status creates one active `device` category
+alert per fault episode. Repeated fault packets update that alert rather than
+creating notification spam; a later healthy packet resolves it. A new fault
+after recovery creates a new alert. Alerts are written in the same transaction
+as the reading and device heartbeat and are published to Supabase Realtime, so
+they appear in both workspace notifications and alert history. Adding a device
+alone does not create an alert.
+
 ## Wireless registration slice (0014)
 
 `devices.requires_serial_number` is non-null and defaults to false for existing

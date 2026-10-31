@@ -16,7 +16,7 @@ from app.auth import get_current_user
 from app.config import settings
 from app.db import Base, get_db
 from app.main import app
-from app.models import Device, EvaluatorAccess, TelemetryReading, User
+from app.models import Alert, Device, EvaluatorAccess, TelemetryReading, User
 from app.discovery import Advertisement, DeviceIdentity, discovery
 from app.mqtt import MQTTBridge, bridge, ingest_message, utc
 
@@ -223,6 +223,46 @@ def test_sensor_disconnect_sentinels_are_faults_not_measurements(workspace):
     )
     assert reading.humidity_percent == 88 and reading.sensor_status == "SENSOR_FAULT"
     assert w.db.get(Device, w.device.id).status == "fault"
+
+
+def test_device_fault_alerts_are_deduplicated_and_resolved_on_recovery(workspace):
+    w = workspace
+    connect(w)
+    received = datetime.now(timezone.utc)
+
+    def send(message_id, status, sd_ok, offset):
+        packet = {
+            "airTemp": 25.0,
+            "messageId": message_id,
+            "sdOK": sd_ok,
+            "status": status,
+        }
+        return ingest_message(
+            w.db,
+            "sproutsync/telemetry",
+            json.dumps(packet).encode(),
+            received_at=received + timedelta(seconds=offset),
+        )
+
+    assert send("fault-1", "SD CARD ERR", False, 0)
+    alert = w.db.scalar(select(Alert))
+    assert alert is not None
+    assert alert.owner_id == w.owner.id and alert.device_id == w.device.id
+    assert alert.category == "device" and alert.severity == "warning"
+    assert alert.status == "open"
+    assert "SD CARD ERR" in alert.message
+    assert alert.recommended_action
+
+    assert send("fault-2", "SD CARD ERR", False, 1)
+    assert w.db.scalar(select(func.count()).select_from(Alert)) == 1
+
+    assert send("recovered-1", "NONE", True, 2)
+    assert alert.status == "resolved"
+
+    assert send("fault-3", "SD CARD ERR", False, 3)
+    alerts = w.db.scalars(select(Alert).order_by(Alert.id)).all()
+    assert len(alerts) == 2
+    assert alerts[1].status == "open"
 
 
 def test_stale_or_broker_disconnected_devices_go_offline_and_recover(

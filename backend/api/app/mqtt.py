@@ -22,7 +22,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.config import settings
 from app.db import SessionLocal
-from app.models import Device, TelemetryReading, User
+from app.models import Alert, Device, TelemetryReading, User
 
 logger = logging.getLogger(__name__)
 SENSORS = {
@@ -147,8 +147,60 @@ def ingest_message(
         sensor_status = "SENSOR_FAULT"
     if packet.sdOK is False and sensor_status in ("NONE", "OK", "NORMAL"):
         sensor_status = "SD_ERROR"
+    previous_status = device.status
     device.status = "online" if sensor_status in ("NONE", "OK", "NORMAL") else "fault"
     device.last_seen_at = received
+    device_fault = device.status == "fault"
+    active_device_alert = db.scalar(
+        select(Alert)
+        .where(
+            Alert.device_id == device.id,
+            Alert.category == "device",
+            Alert.status.in_(("open", "acknowledged")),
+            Alert.is_demo.is_(False),
+        )
+        .order_by(Alert.created_at.desc(), Alert.id.desc())
+        .limit(1)
+        .with_for_update()
+    )
+    fault_message = (
+        f"{device.name} ({device.serial_number}) reported {sensor_status}. "
+        "Check the latest sensor readings before relying on them."
+    )
+    if device_fault:
+        if active_device_alert is not None:
+            active_device_alert.title = f"Device fault: {device.name}"
+            active_device_alert.message = fault_message
+        else:
+            latest_device_alert = db.scalar(
+                select(Alert.id)
+                .where(
+                    Alert.device_id == device.id,
+                    Alert.category == "device",
+                    Alert.is_demo.is_(False),
+                )
+                .order_by(Alert.created_at.desc(), Alert.id.desc())
+                .limit(1)
+            )
+            if latest_device_alert is None or previous_status != "fault":
+                db.add(
+                    Alert(
+                        owner_id=device.owner_id,
+                        device_id=device.id,
+                        title=f"Device fault: {device.name}",
+                        message=fault_message,
+                        recommended_action=(
+                            "Inspect the reported device fault. Confirm fresh, "
+                            "valid sensor readings have returned before relying on them."
+                        ),
+                        severity="warning",
+                        status="open",
+                        category="device",
+                    )
+                )
+    elif active_device_alert is not None:
+        active_device_alert.status = "resolved"
+
     db.add(
         TelemetryReading(
             owner_id=device.owner_id,

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { apiFetch, supabase } from "../supabase";
 import { apiUrl } from "../config";
-import { errorMessage, type Device, type Reading, type WorkspaceData } from "./workspace";
+import { errorMessage, type Alert, type Device, type Reading, type WorkspaceData } from "./workspace";
 
 export type MQTTStatus = {
   state: string;
@@ -104,6 +104,21 @@ export function useLiveTelemetry(profileId: number, setData: Dispatch<SetStateAc
         const reading = row as Reading;
         setData((current) => current.devices.some((d) => d.id === reading.device_id)
           ? { ...current, readings: mergeReadings(current.readings, [reading]) } : current);
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "alerts" }, (payload) => {
+        if (!active) return;
+        const nextAlert = payload.new as Partial<Alert>;
+        const previousAlert = payload.old as Partial<Alert>;
+        const id = Number(nextAlert.id ?? previousAlert.id);
+        if (!Number.isFinite(id)) return;
+        setData((current) => {
+          const alerts = current.alerts.filter((alert) => alert.id !== id);
+          if (payload.eventType !== "DELETE") {
+            alerts.push(nextAlert as Alert);
+          }
+          alerts.sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at) || b.id - a.id);
+          return { ...current, alerts };
+        });
       })
       .subscribe((status) => {
         if (!active) return;

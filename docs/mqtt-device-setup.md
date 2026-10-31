@@ -70,6 +70,12 @@ otherwise arrival time. Offline backfill is not part of this live ingestion path
 SD error mark a device as faulty. Status messages containing `OFFLINE` or
 `DISCONNECTED` mark it offline; an `ONLINE` status message alone never detects it.
 
+A fresh faulty packet creates a device alert in both workspace **Notifications**
+and **Alerts**. Further fault packets update that alert rather than creating
+duplicates; a healthy packet resolves it. Adding or registering a device does
+not itself create a fault alert. Device alerts follow the account's system-alert
+notification preference.
+
 ## Server setup and recovery
 
 Restart the launcher; it installs missing or outdated requirements automatically:
